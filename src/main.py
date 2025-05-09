@@ -20,6 +20,7 @@ ON_CURRENT = 10.8
 OFF_CURRENT = 0.05
 ON_TIME = 0.96
 TEXT_COLUMNS = 60 # Adjusted for typical Python font widths
+UPDATE_INTERVAL_MS = 100  # Adjust the interval as needed
 
 
 def wavelength_to_rgb(wavelength):
@@ -141,6 +142,10 @@ class OpenOBSApp(tk.Tk):
         # Move the serial log widget into the log_tab
         self.serial_log = scrolledtext.ScrolledText(log_tab, wrap=tk.WORD, height=25, width=TEXT_COLUMNS, state=tk.DISABLED)
         self.serial_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.serial_log.tag_configure("center", justify="center")
+        self.serial_log.tag_configure("right", justify="right")
+        self.serial_log.tag_configure("left", justify="left")
+        self.serial_log.tag_configure("debug", foreground="red")  # Debug messages in red
 
 
         # Configure grid expansions
@@ -156,7 +161,6 @@ class OpenOBSApp(tk.Tk):
         ttk.Label(connection_frame, text="COM Port:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.cb_ports = ttk.Combobox(connection_frame, width=10, state="readonly")
         self.cb_ports.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        self.cb_ports.bind("<<ComboboxSelected>>", self.on_port_select) # Optional: Handle selection change if needed
         self.cb_ports.bind("<Button-1>", self.update_ports_list) # Update list on dropdown click
         self.update_ports_list() # Initial population
 
@@ -249,16 +253,6 @@ class OpenOBSApp(tk.Tk):
         ttk.Checkbutton(self.sensors_frame, text="Pressure", variable=self.cb_pressure_var).pack(anchor="w")
         ttk.Checkbutton(self.sensors_frame, text="Temperature", variable=self.cb_temperature_var).pack(anchor="w")
 
-        # LED Current
-        # current_group = ttk.LabelFrame(settings_frame, text="LED Current (mA)")
-        # current_group.grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-        # # Use Spinbox for LED current as well (like VB's NumericUpDown)
-        # self.led_current_var = tk.IntVar(value=50)
-        # self.nud_current = tk.Spinbox(current_group, from_=0, to=255, width=5, textvariable=self.led_current_var, command=self.update_battery) # Added command for immediate update
-        # self.nud_current.pack(side=tk.LEFT, padx=5)
-        # self.nud_current.delete(0, "end") # Not needed when using textvariable
-        # self.nud_current.insert(0, "50") # Default value set by textvariable
-
         # --- Battery Frame ---
         ttk.Label(battery_frame, text="Battery configuration:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.cb_battery_type = ttk.Combobox(battery_frame, values=["2000 mAh Li-SOCL2", "800 mAh Li-ion", "Custom"], state="readonly", width=20)
@@ -267,10 +261,8 @@ class OpenOBSApp(tk.Tk):
         self.cb_battery_type.bind("<<ComboboxSelected>>", self.update_battery_config)
 
         self.lbl_capacity = ttk.Label(battery_frame, text="Capacity (mAh):")
-        # self.lbl_capacity.grid(row=1, column=0, padx=5, pady=5, sticky="w") # Grid managed in update_battery_config
         self.tb_capacity_entry = ttk.Entry(battery_frame, textvariable=self.custom_battery_mah, width=8)
         self.tb_capacity_entry.bind("<KeyRelease>", lambda e: self.validate_and_update_battery()) # Update on key release
-        # self.tb_capacity_entry.grid(row=1, column=1, padx=5, pady=5, sticky="w") # Grid managed
 
         ttk.Label(battery_frame, text="Est. Battery Life [days]:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         self.tb_battery_life = ttk.Entry(battery_frame, width=8, state="readonly")
@@ -284,7 +276,6 @@ class OpenOBSApp(tk.Tk):
         self.cb_debug = ttk.Checkbutton(debug_frame, text="Debug Mode", variable=self.debug_mode)
         self.cb_debug.pack(anchor="w")
 
-       
 
 
         # --- Initial State ---
@@ -302,10 +293,6 @@ class OpenOBSApp(tk.Tk):
         else:
             self.cb_ports.set('') # Clear if no ports
 
-    def on_port_select(self, event=None):
-        # If needed, handle actions when a port is explicitly selected
-        pass
-
     def toggle_connection(self):
         if not self.connected:
             port = self.cb_ports.get()
@@ -316,8 +303,6 @@ class OpenOBSApp(tk.Tk):
                 self.serial_port.port = port
                 self.serial_port.baudrate = 250000
                 self.serial_port.timeout = 0.1
-
-                # Remove unnecessary DTR toggling and reduce delays
                 self.serial_port.open()
 
                 self.stop_thread = False
@@ -325,6 +310,8 @@ class OpenOBSApp(tk.Tk):
                 self.serial_thread.start()
 
                 self.btn_connect.config(text="Disconnect")
+                self.serial_log.config(state=tk.NORMAL) # Enable writing
+                self.serial_log.delete('1.0', tk.END) # Clear log on connect
                 self.log_text("Attempting connection...", "center")
                 self.connected = True
                 self.tb_sn.config(state=tk.NORMAL)
@@ -360,7 +347,6 @@ class OpenOBSApp(tk.Tk):
             spinbox.config(state=new_state)
 
         if is_continuous:
-            # Set spinboxes to 00:00:00
             self.interval_setting_hour.set(0)
             self.interval_setting_min.set(0)
             self.interval_setting_sec.set(0)
@@ -395,7 +381,6 @@ class OpenOBSApp(tk.Tk):
                 self.dtp_start_date_str.set(now.strftime("%m/%d/%Y"))
             self.start_time_hour_var.set(now.hour)
             self.start_time_min_var.set(now.minute)
-
 
         self.update_battery()
 
@@ -485,7 +470,6 @@ class OpenOBSApp(tk.Tk):
 
 
     # --- Core Logic ---
-
     def get_delay_seconds(self):
         """Calculates the delay in seconds from now until the specified start time."""
         if not self.cb_delay_var.get():
@@ -849,29 +833,17 @@ class OpenOBSApp(tk.Tk):
     def log_text(self, message: str, justification: str = "left", tag: str = None):
         """Appends text to the serial log Text widget."""
         if not self.debug_mode.get() and tag == "debug":
-            # Skip raw serial messages if debug mode is off
-            return
+            return # Skip printing raw serial messages if debug mode is off
         try:
             # Ensure widget exists and is valid before trying to modify
-            if not self.serial_log.winfo_exists(): return
+            if not self.serial_log.winfo_exists(): 
+                return
 
             self.serial_log.config(state=tk.NORMAL) # Enable writing
-            line_break = '\n' # Always add a newline
 
-            # Insert text with appropriate justification/tag
-            if justification == "center":
-                self.serial_log.insert(tk.END, message + line_break, ("center", tag) if tag else "center")
-            elif justification == "right":
-                self.serial_log.insert(tk.END, message + line_break, ("right", tag) if tag else "right")
-            else: # Left (default)
-                if tag:
-                    self.serial_log.insert(tk.END, message + line_break, tag)
-                else:
-                    self.serial_log.insert(tk.END, message + line_break)
-
-            # Apply red color for debug messages
-            if tag == "debug":
-                self.serial_log.tag_configure("debug", foreground="red")
+            # Insert the message with the appropriate tag and justification
+            jtag = self._get_tag(justification, tag)
+            self.serial_log.insert(tk.END, message + '\n', jtag)
 
             self.serial_log.see(tk.END) # Scroll to the bottom
             self.serial_log.config(state=tk.DISABLED) # Disable writing
@@ -881,6 +853,13 @@ class OpenOBSApp(tk.Tk):
             print(f"Error updating log widget: {e}")
         except Exception as e:
             print(f"Unexpected error logging: {e}")
+
+    def _get_tag(self, justification: str, tag: str) -> str:
+        """Determines the appropriate tag based on justification and additional tags."""
+        base_tag = justification if justification in ["center", "right", "left"] else "left"
+        if tag:
+            return (base_tag, tag)
+        return base_tag
 
     def update_plot(self, event=None):
         """Updates the plot based on the selected type."""
@@ -926,7 +905,7 @@ class OpenOBSApp(tk.Tk):
         self.plot_canvas_widget = self.plot_canvas.get_tk_widget()
         self.plot_canvas_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-    
+
     def update_plot_selectors(self, event=None):
         for widget in self.plot_selectors_frame.winfo_children():
             widget.destroy()
@@ -948,25 +927,43 @@ class OpenOBSApp(tk.Tk):
             )
             for col in self.time_series_df.columns:
                 self.time_series_listbox.insert(tk.END, col)
-            self.time_series_listbox.pack(side=tk.LEFT, fill=tk.NONE, expand=True)
+            self.time_series_listbox.grid(row=0, column=0)
 
             # Clear selections button
             ttk.Button(
                 self.plot_selectors_frame,
                 text="Clear Selections",
                 command=lambda: self.time_series_listbox.selection_clear(0, tk.END)
-            ).pack(fill=tk.X)
+            ).grid(row=1, column=0)
+
+            n_samples_frame = ttk.Frame(self.plot_selectors_frame)
+            n_samples_frame.grid(row=0, column=1, padx=5)
+            tk.Label(n_samples_frame, text="# of samples:").grid(row=0, column=0)
+            self.num_samples_entry = tk.Entry(n_samples_frame)
+            self.num_samples_entry.grid(row=1, column=0)
+            tk.Button(n_samples_frame, text="Submit", command=self.get_num_samples).grid(row=2, column=0)
+
+    
+    def get_num_samples(self):
+        """Gets the number of samples from the entry box."""
+        try:
+            num_samples = int(self.num_samples_entry.get())
+            if num_samples > 0:
+                self.max_time_steps = num_samples
+            else:
+                messagebox.showerror("Input Error", "Please enter a positive integer.")
+        except ValueError:
+            messagebox.showerror("Input Error", "Invalid input. Please enter a positive integer.")
 
 
     def update_time_series_plot(self):
         """Updates the time series plot."""
         selected_indices = self.time_series_listbox.curselection()
-        selected_vars = [self.time_series_df.columns[i] for i in selected_indices]
+        selected_vars = [str(self.time_series_df.columns[i]) for i in selected_indices]
 
         self.ax.clear()
         self.ax.set_title("Time Series")
         self.ax.set_xlabel("Sample #")
-        # self.ax.set_ylabel(var1)
         self.ax.grid(True, linestyle=":", alpha=0.6)
 
         x = self.time_series_df.index.to_numpy()
@@ -975,8 +972,8 @@ class OpenOBSApp(tk.Tk):
             y = self.time_series_df[v].to_numpy()
             if len(x) > 0:
                 self.ax.plot(x, y, linewidth=2, label=v)
-                self.ax.set_xlim(max(0, x[-1] - 30), x[-1])
-        plt.legend()
+                self.ax.set_xlim(max(0, x[-1] - self.max_time_steps), x[-1])
+        plt.legend(loc='upper left')
         self.plot_canvas.draw()
 
     def spectrum_plot(self, band_prefix):
