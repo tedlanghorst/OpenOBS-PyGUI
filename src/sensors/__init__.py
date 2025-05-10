@@ -2,7 +2,7 @@ from .vcnl4010_sensor import VCNL4010Sensor
 from .as7265x_sensor import AS7265XSensor
 
 
-def make_sensor_obj(sensor_name:str):
+def make_sensor_obj(sensor_name: str):
     """
     Factory function to get the appropriate sensor class based on the sensor name.
     """

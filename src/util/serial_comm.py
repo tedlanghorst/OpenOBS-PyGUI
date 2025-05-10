@@ -1,8 +1,10 @@
 import serial
 import threading
-import time
 import queue
 from tkinter import messagebox
+
+from .xor_checksum import calculate_checksum, validate_checksum
+
 
 class SerialCommunicator:
     """This class is used for serial comms using NMEA-style messages.
@@ -12,6 +14,7 @@ class SerialCommunicator:
         - words: List of commands and values that comprise the sentence.
     
     """
+
     def __init__(self, log_callback, debug_mode_callback, sentence_callback):
         self.serial_port = serial.Serial()
         self.serial_thread = None
@@ -60,9 +63,8 @@ class SerialCommunicator:
                 return
 
         self.log_callback("Disconnected", "center")
-        
 
-    def send_serial_message(self, sentence:str):
+    def send_serial_message(self, sentence: str):
         """Formats and sends a message over the serial port."""
         if not self.is_open or not self.serial_port.is_open:
             self.log_callback("Error: Cannot send, not connected.", "center", "error")
@@ -76,7 +78,6 @@ class SerialCommunicator:
             self.log_callback(f"Serial Write Error: {e}", "center", "error")
         except Exception as e:
             self.log_callback(f"Unexpected Send Error: {e}", "center", "error")
-
 
     def read_serial_data(self):
         """Runs in a separate thread to read data from serial port."""
@@ -111,7 +112,6 @@ class SerialCommunicator:
                                 else:
                                     # Bypass queue for critical messages like OPENOBS
                                     self.sentence_callback(sentence)
-                                    
 
             except serial.SerialException as e:
                 self.log_callback(f"Serial Exception: {e}", "center", "error")
@@ -122,62 +122,23 @@ class SerialCommunicator:
 
     def get_sentence(self, message: str) -> list[str]:
         sentence = []
-        try: 
+        try:
             # Skip checksum validation for HEADERS and DATA messages
             if message.startswith("HEADERS") or message.startswith("DATA"):
                 sentence = message
             elif validate_checksum(message):
                 start_idx = message.index('$')
-                end_idx = message.rindex('*') # Use last '*' for robustness
-                sentence = message[start_idx + 1 : end_idx]
+                end_idx = message.rindex('*')  # Use last '*' for robustness
+                sentence = message[start_idx + 1:end_idx]
             else:
                 self.log_callback(f"Invalid Checksum: {message}", "left", "error")
-        
+
         except Exception as e:
             self.log_callback(f"Error parsing message '{message}': {e}", "left", "error")
 
         return sentence
-        
-    
+
     @property
     def is_open(self):
         """Returns whether the serial port is open."""
         return self.serial_port.is_open
-
-
-## Utility functions
-
-
-    
-
-    
-
-def calculate_checksum(sentence: str) -> str:
-    """Calculates the NMEA-style checksum for a sentence."""
-    checksum = 0
-    for char in sentence:
-        checksum ^= ord(char)
-    return f"{checksum:02X}"
-
-def validate_checksum(message: str) -> bool:
-    """Validates the checksum of a received NMEA-style message."""
-    if not message or '$' not in message or '*' not in message:
-        return False
-
-    try:
-        start_idx = message.index('$')
-        # Find last asterisk for checksum
-        end_idx = message.rindex('*')
-
-        if start_idx >= end_idx or end_idx + 3 > len(message):
-            return False # Invalid structure or not enough chars for checksum
-
-        sentence = message[start_idx + 1 : end_idx]
-        expected_checksum = calculate_checksum(sentence)
-        provided_checksum = message[end_idx + 1 : end_idx + 3]
-
-        return expected_checksum.upper() == provided_checksum.upper()
-    except ValueError:
-        return False # index() or rindex() throws ValueError if char not found
-
-

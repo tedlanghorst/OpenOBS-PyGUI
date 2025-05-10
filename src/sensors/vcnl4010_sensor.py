@@ -2,7 +2,9 @@ from ._base_sensor import BaseSensor
 import tkinter as tk
 from tkinter import ttk
 
+
 class VCNL4010Sensor(BaseSensor):
+
     def __init__(self):
         super().__init__("VCNL4010")
 

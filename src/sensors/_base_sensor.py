@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 
+
 class BaseSensor(ABC):
+
     def __init__(self, name):
         self.name = name
-    
+
     @abstractmethod
     def configure_gui(self, parent_frame):
         """Configure the GUI elements specific to this sensor."""

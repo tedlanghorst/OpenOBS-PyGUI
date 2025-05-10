@@ -5,17 +5,19 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+
 class BasePlot(ABC):
-    def __init__(self, canvas: FigureCanvasTkAgg, fig: Figure, ax: Axes, controls_frame:ttk.Frame):
+
+    def __init__(self, canvas: FigureCanvasTkAgg, fig: Figure, ax: Axes, controls_frame: ttk.Frame):
         self.canvas = canvas
         self.fig = fig
         self.ax = ax
-        self.controls_frame = controls_frame 
+        self.controls_frame = controls_frame
 
         self.ax.clear()
         self._setup_controls()
         self._setup_axes()
-        
+
     @classmethod
     @abstractmethod
     def valid_sensors(cls) -> list[str]:
@@ -40,5 +42,5 @@ class BasePlot(ABC):
 
     @abstractmethod
     def update(self, data):
-        """Update the plot with new data."""        
+        """Update the plot with new data."""
         pass

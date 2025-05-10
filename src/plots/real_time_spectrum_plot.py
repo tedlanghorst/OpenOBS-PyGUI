@@ -5,34 +5,33 @@ from tkinter import ttk
 
 
 class RealTimeSpectrumPlot(BasePlot):
+
     @classmethod
     def valid_sensors(cls):
-        return ["AS7265X"] 
-    
+        return ["AS7265X"]
+
     @classmethod
     def get_pretty_name(cls):
         return "Real-Time Spectrum"
-    
+
     def __init__(self, *args):
         self.bands = [410, 435, 460, 485, 510, 535, 560, 585, 610, 645, 680, 705, 730, 760, 810, 860, 900, 940]
         self.colors = [wavelength_to_rgb(b) for b in self.bands]
         self.data_memory = {}
         self.spec_type = ""
         self.band_prefix = ""
-        
+
         super().__init__(*args)
-        
 
     def _setup_controls(self):
         self.spectrum_type_var = tk.StringVar(value="Ambient")
-        self.spectrum_type_menu = ttk.Combobox(
-            self.controls_frame, textvariable=self.spectrum_type_var, state="readonly",
-            values=["Ambient", "Backscatter"]
-        )
+        self.spectrum_type_menu = ttk.Combobox(self.controls_frame,
+                                               textvariable=self.spectrum_type_var,
+                                               state="readonly",
+                                               values=["Ambient", "Backscatter"])
         self.spectrum_type_menu.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.spectrum_type_menu.bind("<<ComboboxSelected>>", self.stale_type_update)
         self.stale_type_update()
-
 
     def _setup_axes(self):
         """Set up the axes with labels and grid."""
@@ -55,7 +54,7 @@ class RealTimeSpectrumPlot(BasePlot):
         # Clear all existing lines on axes
         for line in self.ax.lines:
             line.remove()
-            
+
         self.plot_spectrum(data, self.band_prefix)
         self.ax.set_title(F"{self.spec_type} Light Spectrum")
         self.canvas.draw()
@@ -63,7 +62,7 @@ class RealTimeSpectrumPlot(BasePlot):
     def plot_spectrum(self, data, band_prefix):
         values = []
         for b in self.bands:
-            values.append(data[f'{band_prefix}{b}']/100) # Convert from uW/cm2 to W/m2
+            values.append(data[f'{band_prefix}{b}'] / 100)  # Convert from uW/cm2 to W/m2
 
         fwhm = 30.0
         sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
@@ -77,8 +76,6 @@ class RealTimeSpectrumPlot(BasePlot):
 
         self.ax.plot(lambda_plot, full_spectrum, color='black', linewidth=2)
 
-       
-        
 
 def wavelength_to_rgb(wavelength):
     """Convert a wavelength in nm to an approximate RGB color."""
@@ -111,7 +108,7 @@ def wavelength_to_rgb(wavelength):
         R = 1.0
         G = 0.0
         B = 0.0
-    
+
     # Let the intensity fall off near the vision limits
     if 380 <= wavelength < 420:
         factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380)

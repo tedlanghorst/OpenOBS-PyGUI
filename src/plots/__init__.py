@@ -1,13 +1,13 @@
 from ._base_plot import BasePlot
-from .real_time_spectrum_plot import RealTimeSpectrumPlot
 from .time_series_plot import TimeSeriesPlot
+from .real_time_spectrum_plot import RealTimeSpectrumPlot
 
 
 def get_valid_plots(sensor_type: str) -> dict[str, BasePlot]:
     """
     Returns a list of plot classes that are valid for the given sensor type.
     """
-    plot_classes = [RealTimeSpectrumPlot, TimeSeriesPlot]
+    plot_classes = [TimeSeriesPlot, RealTimeSpectrumPlot]
     valid_plots = {}
 
     for plot_class in plot_classes:
