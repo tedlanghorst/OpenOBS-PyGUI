@@ -5,8 +5,8 @@ from tkinter import ttk
 
 class AS7265XSensor(BaseSensor):
 
-    def __init__(self):
-        super().__init__("AS7265X")
+    def __init__(self, parent_frame):
+        super().__init__("AS7265X", parent_frame)
 
     def configure_gui(self, parent_frame):
         """Add GUI elements specific to AS7265X."""

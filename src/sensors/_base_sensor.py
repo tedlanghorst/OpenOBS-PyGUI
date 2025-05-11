@@ -3,8 +3,9 @@ from abc import ABC, abstractmethod
 
 class BaseSensor(ABC):
 
-    def __init__(self, name):
+    def __init__(self, name: str, parent_frame):
         self.name = name
+        self.configure_gui(parent_frame)
 
     @abstractmethod
     def configure_gui(self, parent_frame):

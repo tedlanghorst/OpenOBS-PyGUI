@@ -12,6 +12,7 @@ import pandas as pd
 import subprocess
 
 from util.serial_comm import SerialCommunicator
+from util.test_comm import TestCommunicator
 from sensors import make_sensor_obj
 from plots import get_valid_plots
 
@@ -30,7 +31,7 @@ class OpenOBSApp(tk.Tk):
         super().__init__()
 
         # Set a reasonable default size for the window and center it before drawing
-        window_width = 1600
+        window_width = 1200
         window_height = 900
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -44,7 +45,7 @@ class OpenOBSApp(tk.Tk):
         self.geometry(f"{window_width}x{window_height}")
 
         # --- Member Variables ---
-        self.ser_com = SerialCommunicator(self.log_text, lambda: self.debug_mode.get(), self.process_received_sentence)
+        self.ser_com = SerialCommunicator(self.log_text, self.process_received_sentence)
         self.sensor_type = None
         self.sensor = None
         self.plot = None
@@ -56,6 +57,7 @@ class OpenOBSApp(tk.Tk):
         self.custom_battery_mah = tk.StringVar(value="2000")
         self.column_headers = []
         self.debug_mode = tk.BooleanVar(value=False)  # Add debug mode variable
+        self.use_test_communicator = tk.BooleanVar(value=False)  # Add TestCommunicator toggle variable
 
         # File logging attributes
         self.log_file_path = None
@@ -268,6 +270,13 @@ class OpenOBSApp(tk.Tk):
         debug_frame.grid(row=4, column=0, padx=10, pady=5, sticky="w")
         self.cb_debug = ttk.Checkbutton(debug_frame, text="Debug Mode", variable=self.debug_mode)
         self.cb_debug.pack(anchor="w")
+
+        # Add a new checkbox for using TestCommunicator
+        self.cb_use_test_communicator = ttk.Checkbutton(debug_frame,
+                                                        text="Use TestCommunicator",
+                                                        variable=self.use_test_communicator,
+                                                        command=self.toggle_communicator)
+        self.cb_use_test_communicator.pack(anchor="w")
 
         # Periodically process the data queue
         self.after(UPDATE_INTERVAL_MS, self.process_data_queue)
@@ -742,15 +751,7 @@ class OpenOBSApp(tk.Tk):
         for widget in self.sensors_frame.winfo_children():
             widget.destroy()
 
-        try:
-            self.sensor = make_sensor_obj(self.sensor_type)
-        except:
-            print('1')
-        try:
-            self.sensor.configure_gui(self.sensors_frame)
-        except:
-            print('2')
-
+        self.sensor = make_sensor_obj(self.sensor_type, self.sensors_frame)
         self.update_plot_types()
 
     def toggle_file_logging(self):
@@ -782,6 +783,15 @@ class OpenOBSApp(tk.Tk):
             self.log_file_object = None
             self.log_file_path = None
             self.btn_toggle_file_log.config(text="Start Logging to File")
+
+    def toggle_communicator(self):
+        """Switches between TestCommunicator and SerialCommunicator based on the checkbox state."""
+        if self.use_test_communicator.get():
+            self.ser_com = TestCommunicator(self.log_text, self.process_received_sentence)
+            self.log_text("Switched to TestCommunicator.", "center", "info")
+        else:
+            self.ser_com = SerialCommunicator(self.log_text, self.process_received_sentence)
+            self.log_text("Switched to SerialCommunicator.", "center", "info")
 
     def on_closing(self):
         """Handles window close event."""

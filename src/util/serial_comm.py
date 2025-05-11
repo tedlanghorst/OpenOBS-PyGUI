@@ -15,12 +15,11 @@ class SerialCommunicator:
     
     """
 
-    def __init__(self, log_callback, debug_mode_callback, sentence_callback):
+    def __init__(self, log_callback, sentence_callback):
         self.serial_port = serial.Serial()
         self.serial_thread = None
         self.stop_thread = False
         self.log_callback = log_callback  # Function to log messages
-        self.debug_mode_callback = debug_mode_callback  # Function to check debug mode
         self.sentence_callback = sentence_callback  # Function to process received messages
         self.data_queue = queue.Queue()  # Thread-safe queue for incoming data
 
@@ -72,8 +71,7 @@ class SerialCommunicator:
         message = f"${sentence}*{calculate_checksum(sentence)}\r\n"
         try:
             self.serial_port.write(message.encode('ascii'))
-            if self.debug_mode_callback():
-                self.log_callback(f"Debug: Sent: {message.strip()}", "right", "debug")
+            self.log_callback(f"Sent: {message.strip()}", "right", "debug")
         except serial.SerialException as e:
             self.log_callback(f"Serial Write Error: {e}", "center", "error")
         except Exception as e:
@@ -102,8 +100,7 @@ class SerialCommunicator:
                         line, buffer = buffer.split('\n', 1)
                         message = line.strip()
                         if message:
-                            if self.debug_mode_callback():
-                                self.log_callback(f"Debug: {message}", "left", "debug")
+                            self.log_callback(f"{message}", "left", "debug")
 
                             sentence = self.get_sentence(message)
                             if sentence:

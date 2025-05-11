@@ -5,8 +5,8 @@ from tkinter import ttk
 
 class VCNL4010Sensor(BaseSensor):
 
-    def __init__(self):
-        super().__init__("VCNL4010")
+    def __init__(self, parent_frame):
+        super().__init__("VCNL4010", parent_frame)
 
     def configure_gui(self, parent_frame):
         """Add GUI elements specific to VCNL4010."""
