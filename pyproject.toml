@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "OpenOBS-PyGUI"
+version = "0.1.0"
+description = "A Python GUI for OpenOBS sensors using Tkinter."
+authors = [
+  { name = "Ted Langhorst", email = "ted.langhorst@gmail.com" }
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+  "pyserial",
+  "tkcalendar",
+  "matplotlib",
+  "numpy",
+  "pandas"
+]
+
+[tool.setuptools]
+packages = ["src"]
+include_package_data = true
+
+[tool.setuptools.package-data]
+"" = ["*.icns"]
