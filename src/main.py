@@ -7,14 +7,13 @@ import datetime
 from tkcalendar import DateEntry
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import numpy as np
-import pandas as pd
 import subprocess
 
 from util.serial_comm import SerialCommunicator
 from util.test_comm import TestCommunicator
 from sensors import make_sensor_obj
 from plots import get_valid_plots
+from calibrators import get_valid_calibrations
 
 # Constants (from VB code)
 CONTINUOUS_CURRENT = 2.0
@@ -26,7 +25,6 @@ UPDATE_INTERVAL_MS = 10  # Adjust the interval as needed
 
 
 class OpenOBSApp(tk.Tk):
-
     def __init__(self):
         super().__init__()
 
@@ -41,7 +39,7 @@ class OpenOBSApp(tk.Tk):
 
         self.title("OpenOBS Python GUI")
         # Set an icon for the popup window
-        self.iconbitmap('sensorIcon.ico')
+        self.iconbitmap("sensorIcon.ico")
         self.geometry(f"{window_width}x{window_height}")
 
         # --- Member Variables ---
@@ -53,11 +51,15 @@ class OpenOBSApp(tk.Tk):
         self.interval_setting_hour = tk.IntVar(value=0)
         self.interval_setting_min = tk.IntVar(value=0)
         self.interval_setting_sec = tk.IntVar(value=5)  # Default interval 5s
+        self.cb_continuous_var = tk.BooleanVar()
+        self.cb_delay_var = tk.BooleanVar()
         self.battery_mah = tk.IntVar(value=2000)
         self.custom_battery_mah = tk.StringVar(value="2000")
         self.column_headers = []
-        self.debug_mode = tk.BooleanVar(value=False)  # Add debug mode variable
-        self.use_test_communicator = tk.BooleanVar(value=False)  # Add TestCommunicator toggle variable
+        self.debug_mode = tk.BooleanVar(value=True)  # Add debug mode variable
+        self.use_test_comm = tk.BooleanVar(
+            value=False
+        )  # Add TestCommunicator toggle variable
 
         # File logging attributes
         self.log_file_path = None
@@ -66,11 +68,11 @@ class OpenOBSApp(tk.Tk):
 
         # --- Style ---
         style = ttk.Style(self)
-        style.configure('TButton', padding=6)
-        style.configure('TLabel', padding=2)
-        style.configure('TCheckbutton', padding=2)
-        style.configure('TCombobox', padding=2)
-        style.configure('TEntry', padding=2)
+        style.configure("TButton", padding=6)
+        style.configure("TLabel", padding=2)
+        style.configure("TCheckbutton", padding=2)
+        style.configure("TCombobox", padding=2)
+        style.configure("TEntry", padding=2)
 
         # --- GUI Construction ---
         # Frame Organisation
@@ -95,11 +97,9 @@ class OpenOBSApp(tk.Tk):
         log_tab = ttk.Frame(notebook)
         notebook.add(log_tab, text="Serial Log")
         # Make the serial log widget in the log_tab
-        self.serial_log = scrolledtext.ScrolledText(log_tab,
-                                                    wrap=tk.WORD,
-                                                    height=25,
-                                                    width=TEXT_COLUMNS,
-                                                    state=tk.DISABLED)
+        self.serial_log = scrolledtext.ScrolledText(
+            log_tab, wrap=tk.WORD, height=25, width=TEXT_COLUMNS, state=tk.DISABLED
+        )
         self.serial_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.serial_log.tag_configure("center", justify="center")
         self.serial_log.tag_configure("right", justify="right")
@@ -112,6 +112,11 @@ class OpenOBSApp(tk.Tk):
         notebook.add(plot_tab, text="Plot")
         self.configure_plot_types(plot_tab)
 
+        # Initialize a frame for the plotting tab
+        calibrate_tab = ttk.Frame(notebook)
+        notebook.add(calibrate_tab, text="Calibrate")
+        self.configure_calibration_types(calibrate_tab)
+
         # Configure grid expansions
         self.grid_rowconfigure(0, weight=0)  # connection_frame
         self.grid_rowconfigure(1, weight=0)  # file_logging_frame
@@ -122,144 +127,202 @@ class OpenOBSApp(tk.Tk):
         self.grid_columnconfigure(1, weight=1)  # right side (notebook)
 
         # --- Connection Frame ---
-        ttk.Label(connection_frame, text="COM Port:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(connection_frame, text="COM Port:").grid(
+            row=0, column=0, padx=5, pady=5, sticky="w"
+        )
         self.cb_ports = ttk.Combobox(connection_frame, width=10, state="readonly")
         self.cb_ports.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
-        self.cb_ports.bind("<Button-1>", self.update_ports_list)  # Update list on dropdown click
+        self.cb_ports.bind(
+            "<Button-1>", self.update_ports_list
+        )  # Update list on dropdown click
         self.update_ports_list()  # Initial population
 
-        self.btn_connect = ttk.Button(connection_frame, text="Connect", command=self.toggle_connection)
+        self.btn_connect = ttk.Button(
+            connection_frame, text="Connect", command=self.toggle_connection
+        )
         self.btn_connect.grid(row=0, column=2, padx=5, pady=5)
 
         ttk.Label(connection_frame, text="OR").grid(row=0, column=3, padx=5, pady=5)
 
-        self.btn_hex_send = ttk.Button(connection_frame, text="Upload .hex", command=self.send_hex_file)
+        self.btn_hex_send = ttk.Button(
+            connection_frame, text="Upload .hex", command=self.send_hex_file
+        )
         self.btn_hex_send.grid(row=0, column=4, padx=5, pady=5)
 
-        ttk.Label(connection_frame, text="Serial No:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(connection_frame, text="Serial No:").grid(
+            row=1, column=0, padx=5, pady=5, sticky="w"
+        )
         self.tb_sn = ttk.Entry(connection_frame, width=10, state="readonly")
         self.tb_sn.grid(row=1, column=1, padx=5, pady=5, sticky="ew")
 
         # --- Logging Frame ---
-        self.btn_toggle_file_log = ttk.Button(file_logging_frame,
-                                              text="Start Logging to File",
-                                              command=self.toggle_file_logging)
+        self.btn_toggle_file_log = ttk.Button(
+            file_logging_frame,
+            text="Start Logging to File",
+            command=self.toggle_file_logging,
+        )
         self.btn_toggle_file_log.pack(padx=5, pady=5, fill=tk.X)
 
         # --- Settings Frame ---
         # Reorganize Settings into Data Logger and Measurements
-        data_logger_frame = ttk.LabelFrame(settings_frame, text="Data Logger", padding=(10, 5))
-        data_logger_frame.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        data_logger_frame = ttk.LabelFrame(
+            settings_frame, text="Data Logger", padding=(10, 5)
+        )
+        data_logger_frame.grid(
+            row=0, column=0, columnspan=3, padx=5, pady=5, sticky="ew"
+        )
 
-        self.sensors_frame = ttk.LabelFrame(settings_frame, text="Sensor", padding=(10, 5))
-        self.sensors_frame.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
+        self.sensors_frame = ttk.LabelFrame(
+            settings_frame, text="Sensor", padding=(10, 5)
+        )
+        self.sensors_frame.grid(
+            row=1, column=0, columnspan=3, padx=5, pady=5, sticky="ew"
+        )
 
-        self.btn_send_settings = ttk.Button(settings_frame,
-                                            text="Send Settings",
-                                            command=self.send_settings,
-                                            state=tk.DISABLED)
-        self.btn_send_settings.grid(row=2, column=0, columnspan=3, padx=5, pady=10,
-                                    sticky='s')  # Moved to settings frame
+        self.btn_send_settings = ttk.Button(
+            settings_frame,
+            text="Send Settings",
+            command=self.send_settings,
+            state=tk.DISABLED,
+        )
+        self.btn_send_settings.grid(
+            row=2, column=0, columnspan=3, padx=5, pady=10, sticky="s"
+        )  # Moved to settings frame
 
         # Sample Interval (Using Spinboxes)
         interval_group = ttk.Frame(data_logger_frame)
         interval_group.grid(row=0, column=0, columnspan=3, padx=5, pady=5, sticky="w")
-        ttk.Label(interval_group, text="Sample Interval [HH:mm:ss]:").pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Label(interval_group, text="Sample Interval [HH:mm:ss]:").pack(
+            side=tk.LEFT, padx=(0, 2)
+        )
 
-        self.spin_interval_h = tk.Spinbox(interval_group,
-                                          from_=0,
-                                          to=23,
-                                          width=3,
-                                          format="%02.0f",
-                                          textvariable=self.interval_setting_hour,
-                                          command=self.update_battery)
+        self.spin_interval_h = tk.Spinbox(
+            interval_group,
+            from_=0,
+            to=23,
+            width=3,
+            format="%02.0f",
+            textvariable=self.interval_setting_hour,
+            command=self.update_battery,
+        )
         self.spin_interval_h.pack(side=tk.LEFT)
         ttk.Label(interval_group, text=":").pack(side=tk.LEFT)
-        self.spin_interval_m = tk.Spinbox(interval_group,
-                                          from_=0,
-                                          to=59,
-                                          width=3,
-                                          format="%02.0f",
-                                          textvariable=self.interval_setting_min,
-                                          command=self.update_battery)
+        self.spin_interval_m = tk.Spinbox(
+            interval_group,
+            from_=0,
+            to=59,
+            width=3,
+            format="%02.0f",
+            textvariable=self.interval_setting_min,
+            command=self.update_battery,
+        )
         self.spin_interval_m.pack(side=tk.LEFT)
         ttk.Label(interval_group, text=":").pack(side=tk.LEFT)
-        self.spin_interval_s = tk.Spinbox(interval_group,
-                                          from_=0,
-                                          to=59,
-                                          width=3,
-                                          format="%02.0f",
-                                          textvariable=self.interval_setting_sec,
-                                          command=self.update_battery)
+        self.spin_interval_s = tk.Spinbox(
+            interval_group,
+            from_=0,
+            to=59,
+            width=3,
+            format="%02.0f",
+            textvariable=self.interval_setting_sec,
+            command=self.update_battery,
+        )
         self.spin_interval_s.pack(side=tk.LEFT)
 
         # Store the Spinboxes in a list for easy enable/disable
-        self.interval_spinboxes = [self.spin_interval_h, self.spin_interval_m, self.spin_interval_s]
+        self.interval_spinboxes = [
+            self.spin_interval_h,
+            self.spin_interval_m,
+            self.spin_interval_s,
+        ]
 
-        self.cb_continuous_var = tk.BooleanVar()
-        self.cb_continuous = ttk.Checkbutton(data_logger_frame,
-                                             text="Continuous (max freq.)",
-                                             variable=self.cb_continuous_var,
-                                             command=self.toggle_continuous)
-        self.cb_continuous.grid(row=1, column=0, columnspan=3, padx=5, pady=2, sticky="w")
+        self.cb_continuous = ttk.Checkbutton(
+            data_logger_frame,
+            text="Continuous (max freq.)",
+            variable=self.cb_continuous_var,
+            command=self.toggle_continuous,
+        )
+        self.cb_continuous.grid(
+            row=1, column=0, columnspan=3, padx=5, pady=2, sticky="w"
+        )
 
         # Delayed Start
         delay_group = ttk.Frame(data_logger_frame)
         delay_group.grid(row=2, column=0, columnspan=3, padx=5, pady=5, sticky="w")
-        self.cb_delay_var = tk.BooleanVar()
-        self.cb_delay = ttk.Checkbutton(delay_group,
-                                        text="Delayed start:",
-                                        variable=self.cb_delay_var,
-                                        command=self.toggle_delay)
+        self.cb_delay = ttk.Checkbutton(
+            delay_group,
+            text="Delayed start:",
+            variable=self.cb_delay_var,
+            command=self.toggle_delay,
+        )
         self.cb_delay.pack(side=tk.LEFT, padx=(0, 5))
 
         # Date Entry (requires tkcalendar)
-        self.dtp_start_date = DateEntry(delay_group, width=10, state=tk.DISABLED, date_pattern='MM/dd/yyyy')
+        self.dtp_start_date = DateEntry(
+            delay_group, width=10, state=tk.DISABLED, date_pattern="MM/dd/yyyy"
+        )
         self.dtp_start_date.pack(side=tk.LEFT, padx=(5, 0))
-        self.dtp_start_date.bind("<<DateEntrySelected>>", lambda e: self.update_battery())
+        self.dtp_start_date.bind(
+            "<<DateEntrySelected>>", lambda e: self.update_battery()
+        )
 
         # Start Time Entry (Using Spinboxes)
         self.start_time_hour_var = tk.IntVar(value=datetime.datetime.now().hour)
         self.start_time_min_var = tk.IntVar(value=datetime.datetime.now().minute)
 
-        self.spin_start_h = tk.Spinbox(delay_group,
-                                       from_=0,
-                                       to=23,
-                                       width=3,
-                                       format="%02.0f",
-                                       state=tk.DISABLED,
-                                       textvariable=self.start_time_hour_var,
-                                       command=self.update_battery)
+        self.spin_start_h = tk.Spinbox(
+            delay_group,
+            from_=0,
+            to=23,
+            width=3,
+            format="%02.0f",
+            state=tk.DISABLED,
+            textvariable=self.start_time_hour_var,
+            command=self.update_battery,
+        )
         self.spin_start_h.pack(side=tk.LEFT)
         ttk.Label(delay_group, text=":").pack(side=tk.LEFT)
-        self.spin_start_m = tk.Spinbox(delay_group,
-                                       from_=0,
-                                       to=59,
-                                       width=3,
-                                       format="%02.0f",
-                                       state=tk.DISABLED,
-                                       textvariable=self.start_time_min_var,
-                                       command=self.update_battery)
+        self.spin_start_m = tk.Spinbox(
+            delay_group,
+            from_=0,
+            to=59,
+            width=3,
+            format="%02.0f",
+            state=tk.DISABLED,
+            textvariable=self.start_time_min_var,
+            command=self.update_battery,
+        )
         self.spin_start_m.pack(side=tk.LEFT)
         # Store start time spinboxes for easy enable/disable
         self.start_time_spinboxes = [self.spin_start_h, self.spin_start_m]
 
         # --- Battery Frame ---
-        ttk.Label(battery_frame, text="Battery configuration:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.cb_battery_type = ttk.Combobox(battery_frame,
-                                            values=["2000 mAh Li-SOCL2", "800 mAh Li-ion", "Custom"],
-                                            state="readonly",
-                                            width=20)
-        self.cb_battery_type.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky="ew")
+        ttk.Label(battery_frame, text="Battery configuration:").grid(
+            row=0, column=0, padx=5, pady=5, sticky="w"
+        )
+        self.cb_battery_type = ttk.Combobox(
+            battery_frame,
+            values=["2000 mAh Li-SOCL2", "800 mAh Li-ion", "Custom"],
+            state="readonly",
+            width=20,
+        )
+        self.cb_battery_type.grid(
+            row=0, column=1, columnspan=2, padx=5, pady=5, sticky="ew"
+        )
         self.cb_battery_type.current(0)
         self.cb_battery_type.bind("<<ComboboxSelected>>", self.update_battery_config)
 
         self.lbl_capacity = ttk.Label(battery_frame, text="Capacity (mAh):")
-        self.tb_capacity_entry = ttk.Entry(battery_frame, textvariable=self.custom_battery_mah, width=8)
-        self.tb_capacity_entry.bind("<KeyRelease>",
-                                    lambda e: self.validate_and_update_battery())  # Update on key release
+        self.tb_capacity_entry = ttk.Entry(
+            battery_frame, textvariable=self.custom_battery_mah, width=8
+        )
+        self.tb_capacity_entry.bind(
+            "<KeyRelease>", lambda e: self.validate_and_update_battery()
+        )  # Update on key release
 
-        ttk.Label(battery_frame, text="Est. Battery Life [days]:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(battery_frame, text="Est. Battery Life [days]:").grid(
+            row=2, column=0, padx=5, pady=5, sticky="w"
+        )
         self.tb_battery_life = ttk.Entry(battery_frame, width=8, state="readonly")
         self.tb_battery_life.grid(row=2, column=1, padx=5, pady=5, sticky="w")
 
@@ -268,15 +331,19 @@ class OpenOBSApp(tk.Tk):
         # Add Debug Mode Checkbox
         debug_frame = ttk.Frame(self)
         debug_frame.grid(row=4, column=0, padx=10, pady=5, sticky="w")
-        self.cb_debug = ttk.Checkbutton(debug_frame, text="Debug Mode", variable=self.debug_mode)
+        self.cb_debug = ttk.Checkbutton(
+            debug_frame, text="Debug Mode", variable=self.debug_mode
+        )
         self.cb_debug.pack(anchor="w")
 
         # Add a new checkbox for using TestCommunicator
-        self.cb_use_test_communicator = ttk.Checkbutton(debug_frame,
-                                                        text="Use TestCommunicator",
-                                                        variable=self.use_test_communicator,
-                                                        command=self.toggle_communicator)
-        self.cb_use_test_communicator.pack(anchor="w")
+        self.cb_use_test_comm = ttk.Checkbutton(
+            debug_frame,
+            text="Use TestCommunicator",
+            variable=self.use_test_comm,
+            command=self.toggle_communicator,
+        )
+        self.cb_use_test_comm.pack(anchor="w")
 
         # Periodically process the data queue
         self.after(UPDATE_INTERVAL_MS, self.process_data_queue)
@@ -285,7 +352,11 @@ class OpenOBSApp(tk.Tk):
         """Process data from the serial communicator's queue."""
         queue_size = self.ser_com.data_queue.qsize()
         if queue_size > 50:  # Example threshold for a warning
-            self.log_text(f"Warning: Serial queue size is high ({queue_size} items).", "center", "error")
+            self.log_text(
+                f"Warning: Serial queue size is high ({queue_size} items).",
+                "center",
+                "error",
+            )
 
         while not self.ser_com.data_queue.empty():
             sentence = self.ser_com.data_queue.get()
@@ -296,17 +367,19 @@ class OpenOBSApp(tk.Tk):
 
     def update_ports_list(self, event=None):
         ports = [port.device for port in serial.tools.list_ports.comports()]
-        self.cb_ports['values'] = ports
+        self.cb_ports["values"] = ports
         if ports:
             # Keep current selection if it's still valid, otherwise select first
             current_selection = self.cb_ports.get()
             if current_selection not in ports:
                 try:
                     self.cb_ports.current(0)
-                except tk.TclError:  # Handle case where combobox might be empty initially
+                except (
+                    tk.TclError
+                ):  # Handle case where combobox might be empty initially
                     pass
         else:
-            self.cb_ports.set('')  # Clear if no ports
+            self.cb_ports.set("")  # Clear if no ports
 
     def toggle_connection(self):
         if not self.ser_com.is_open:
@@ -316,7 +389,7 @@ class OpenOBSApp(tk.Tk):
                 return
 
             self.serial_log.config(state=tk.NORMAL)  # Enable writing
-            self.serial_log.delete('1.0', tk.END)  # Clear log
+            self.serial_log.delete("1.0", tk.END)  # Clear log
             self.ser_com.open_connection(port)
 
             if self.ser_com.is_open:
@@ -355,8 +428,11 @@ class OpenOBSApp(tk.Tk):
         else:
             # Restore previous non-zero setting if it was zeroed
             # Or just leave the vars as they were (user might have manually set to 0)
-            if self.interval_setting_hour.get() == 0 and self.interval_setting_min.get(
-            ) == 0 and self.interval_setting_sec.get() == 0:
+            if (
+                self.interval_setting_hour.get() == 0
+                and self.interval_setting_min.get() == 0
+                and self.interval_setting_sec.get() == 0
+            ):
                 # If currently 0, restore a default like 5s if user enables interval mode
                 self.interval_setting_sec.set(5)
 
@@ -383,7 +459,7 @@ class OpenOBSApp(tk.Tk):
 
     def update_battery_config(self, event=None):
         selection = self.cb_battery_type.current()  # Get index
-        show_custom = (selection == 2)
+        show_custom = selection == 2
 
         if show_custom:
             self.lbl_capacity.grid(row=1, column=0, padx=5, pady=5, sticky="w")
@@ -405,21 +481,25 @@ class OpenOBSApp(tk.Tk):
                 val = int(self.custom_battery_mah.get())
                 if val > 0:
                     self.battery_mah.set(val)
-                    self.tb_capacity_entry.config(foreground='black')  # Valid input style
+                    self.tb_capacity_entry.config(
+                        foreground="black"
+                    )  # Valid input style
                 else:
                     # Indicate error subtly, prevent calculation with invalid value
-                    self.tb_capacity_entry.config(foreground='red')
+                    self.tb_capacity_entry.config(foreground="red")
                     return  # Don't update battery with invalid value
             except ValueError:
                 # Indicate error subtly, prevent calculation with invalid value
-                self.tb_capacity_entry.config(foreground='red')
+                self.tb_capacity_entry.config(foreground="red")
                 return  # Don't update battery with invalid value
 
         self.update_battery()  # Update if validation passed or not custom
 
     def send_settings(self):
         if not self.connected:
-            messagebox.showwarning("Not Connected", "Connect to the device before sending settings.")
+            messagebox.showwarning(
+                "Not Connected", "Connect to the device before sending settings."
+            )
             return
 
         # Get current timestamp (Unix epoch seconds)
@@ -433,7 +513,9 @@ class OpenOBSApp(tk.Tk):
                 m = self.interval_setting_min.get()
                 s = self.interval_setting_sec.get()
                 measure_interval = h * 3600 + m * 60 + s
-            except tk.TclError:  # Handle potential error if spinbox value is invalid somehow
+            except (
+                tk.TclError
+            ):  # Handle potential error if spinbox value is invalid somehow
                 messagebox.showerror("Input Error", "Invalid Sample Interval values.")
                 return
 
@@ -444,7 +526,7 @@ class OpenOBSApp(tk.Tk):
 
         settings_sentence = f"SET,{current_time},{measure_interval},{int(delay_start)},"
         sensor_words = self.sensor.get_settings_words()
-        settings_sentence += ','.join(sensor_words)
+        settings_sentence += ",".join(sensor_words)
 
         self.ser_com.send_serial_message(settings_sentence)
         self.log_text("Settings sent, awaiting confirmation...", "center")
@@ -468,22 +550,30 @@ class OpenOBSApp(tk.Tk):
             delay_seconds = (start_dt - now_dt).total_seconds()
 
             if delay_seconds < 0:
-                self.log_text("Warning: Delay start time is in the past. Delay set to 0.", "center", "error")
+                self.log_text(
+                    "Warning: Delay start time is in the past. Delay set to 0.",
+                    "center",
+                    "error",
+                )
                 return 0
             else:
                 # Return as integer seconds
                 return int(delay_seconds)
 
         except ValueError as e:  # Catches date parsing errors
-            messagebox.showerror("Input Error", f"Invalid date format for delayed start:\n{e}")
+            messagebox.showerror(
+                "Input Error", f"Invalid date format for delayed start:\n{e}"
+            )
             return None  # Indicate error
         except tk.TclError as e:  # Catches errors getting spinbox values
-            messagebox.showerror("Input Error", f"Invalid time value for delayed start:\n{e}")
+            messagebox.showerror(
+                "Input Error", f"Invalid time value for delayed start:\n{e}"
+            )
             return None  # Indicate error
 
     def process_received_sentence(self, sentence: str):
         """Processes a complete message received from the serial port."""
-        parts = sentence.split(',')
+        parts = sentence.split(",")
 
         command = parts[0].upper()  # Make comparison case-insensitive
         if command == "OPENOBS":
@@ -502,7 +592,7 @@ class OpenOBSApp(tk.Tk):
         elif command == "SENSOR" or command == "READY":
             # Device sends sensor configuration type after handshake.
             if command == "READY":
-                #For backwards compatibility
+                # For backwards compatibility
                 self.sensor_type = "VCNL4010"
             else:
                 self.sensor_type = parts[1].strip()
@@ -521,14 +611,14 @@ class OpenOBSApp(tk.Tk):
             # Device sends $FILE,OPEN,FILENAME.TXT*XX
             filename = parts[2] if len(parts) > 2 else "UNKNOWN"
             self.log_text(f"Logging to ({filename}) ", "center")
-            self.log_text(f"--- Sample Readings ---", "center")
+            self.log_text("--- Sample Readings ---", "center")
 
         elif command == "HEADERS":
             self.column_headers = parts[1:]  # Store headers for later use
             self.log_text(f"Headers: {', '.join(self.column_headers)}", "center")
             if self.is_logging_to_file and self.log_file_object:
                 try:
-                    self.log_file_object.write(','.join(parts[1:]) + "\n")
+                    self.log_file_object.write(",".join(parts[1:]) + "\n")
                     self.log_file_object.flush()
                 except IOError as e:
                     self.log_text(f"File logging error: {e}", "left", "error")
@@ -536,7 +626,8 @@ class OpenOBSApp(tk.Tk):
         elif command == "DATA":
             data = {k: float(p) for k, p in zip(self.column_headers, parts[1:])}
             self.plot.update(data)  # Update the plot with the new data
-            self.log_text(','.join(parts[1:]), "left")
+            self.cal.update(data)
+            self.log_text(",".join(parts[1:]), "left")
 
         # Handle potential error messages
         elif command == "SDINIT" and len(parts) > 1 and parts[1] == "0":
@@ -585,16 +676,21 @@ class OpenOBSApp(tk.Tk):
                     if interval_seconds <= 0:
                         # Avoid division by zero, assume continuous if interval is zero/invalid
                         average_consumption_ma = CONTINUOUS_CURRENT
-                    elif interval_seconds < ON_TIME:  # Handle case where interval is shorter than on-time
+                    elif (
+                        interval_seconds < ON_TIME
+                    ):  # Handle case where interval is shorter than on-time
                         average_consumption_ma = ON_CURRENT  # Effectively always on
                     else:
                         off_time = interval_seconds - ON_TIME
                         # VB logic: Use continuous if offTime < 5s, otherwise weighted average
-                        if off_time < 5:  # Use continuous rate for very short off periods
+                        if (
+                            off_time < 5
+                        ):  # Use continuous rate for very short off periods
                             average_consumption_ma = CONTINUOUS_CURRENT
                         else:  # Weighted average for normal intervals
-                            average_consumption_ma = ((ON_CURRENT * ON_TIME) +
-                                                      (OFF_CURRENT * off_time)) / interval_seconds
+                            average_consumption_ma = (
+                                (ON_CURRENT * ON_TIME) + (OFF_CURRENT * off_time)
+                            ) / interval_seconds
 
                 # Calculate remaining life in hours, then days
                 if average_consumption_ma > 0:
@@ -602,7 +698,7 @@ class OpenOBSApp(tk.Tk):
                     remaining_days = remaining_hours / 24.0
                 else:
                     # If avg consumption is zero, life is infinite? Or N/A?
-                    remaining_days = float('inf')
+                    remaining_days = float("inf")
 
                 # Add the delay period back in days
                 total_days = remaining_days + (delay_seconds / 3600.0 / 24.0)
@@ -611,7 +707,7 @@ class OpenOBSApp(tk.Tk):
             # Display result
             self.tb_battery_life.config(state=tk.NORMAL)
             self.tb_battery_life.delete(0, tk.END)
-            if battery_days == float('inf'):
+            if battery_days == float("inf"):
                 self.tb_battery_life.insert(0, "Inf")
             else:
                 self.tb_battery_life.insert(0, f"{battery_days:.1f}")
@@ -632,8 +728,10 @@ class OpenOBSApp(tk.Tk):
             messagebox.showerror("Upload Error", "Please select a COM port.")
             return
 
-        file_path = filedialog.askopenfilename(title="Select .hex file",
-                                               filetypes=[("HEX files", "*.hex"), ("All files", "*.*")])
+        file_path = filedialog.askopenfilename(
+            title="Select .hex file",
+            filetypes=[("HEX files", "*.hex"), ("All files", "*.*")],
+        )
 
         if not file_path:
             return  # User cancelled
@@ -647,7 +745,7 @@ class OpenOBSApp(tk.Tk):
                 "-carduino",  # Programmer type
                 f"-P{port}",  # Serial port
                 "-b115200",  # Baud rate (adjust if needed)
-                f"-Uflash:w:{file_path}:i"  # Write the .hex file to flash memory
+                f"-Uflash:w:{file_path}:i",  # Write the .hex file to flash memory
             ]
 
             self.log_text(f"Uploading {file_path} to {port} using avrdude...", "center")
@@ -657,13 +755,20 @@ class OpenOBSApp(tk.Tk):
 
             if result.returncode == 0:
                 self.log_text("Upload Complete!", "center")
-                messagebox.showinfo("Upload Success", f"Successfully uploaded {file_path} to {port}.")
+                messagebox.showinfo(
+                    "Upload Success", f"Successfully uploaded {file_path} to {port}."
+                )
             else:
                 self.log_text(f"Upload Failed: {result.stderr}", "center", "error")
-                messagebox.showerror("Upload Failed", f"An error occurred during upload:\n{result.stderr}")
+                messagebox.showerror(
+                    "Upload Failed",
+                    f"An error occurred during upload:\n{result.stderr}",
+                )
 
         except FileNotFoundError:
-            messagebox.showerror("Upload Error", "avrdude not found. Please install it and try again.")
+            messagebox.showerror(
+                "Upload Error", "avrdude not found. Please install it and try again."
+            )
             self.log_text("Error: avrdude not found.", "center", "error")
 
         except Exception as e:
@@ -683,7 +788,7 @@ class OpenOBSApp(tk.Tk):
 
             # Insert the message with the appropriate tag and justification
             jtag = self._get_tag(justification, tag)
-            self.serial_log.insert(tk.END, message + '\n', jtag)
+            self.serial_log.insert(tk.END, message + "\n", jtag)
 
             self.serial_log.see(tk.END)  # Scroll to the bottom
             self.serial_log.config(state=tk.DISABLED)  # Disable writing
@@ -696,13 +801,15 @@ class OpenOBSApp(tk.Tk):
 
     def _get_tag(self, justification: str, tag: str) -> str:
         """Determines the appropriate tag based on justification and additional tags."""
-        base_tag = justification if justification in ["center", "right", "left"] else "left"
+        base_tag = (
+            justification if justification in ["center", "right", "left"] else "left"
+        )
         if tag:
             return (base_tag, tag)
         return base_tag
 
     def configure_plot_types(self, plot_tab):
-        # Layout the controls in the ploting tab
+        # Layout the controls in the plotting tab
         plot_controls_frame = ttk.Frame(plot_tab)
         plot_controls_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -711,11 +818,13 @@ class OpenOBSApp(tk.Tk):
         plot_type_frame.pack(side=tk.LEFT, fill=tk.X, expand=False, padx=(0, 10))
 
         ttk.Label(plot_type_frame, text="Select plot:").pack(side=tk.LEFT, padx=(0, 5))
-        self.plot_type_var = tk.StringVar(value='')
-        self.plot_type_menu = ttk.Combobox(plot_type_frame,
-                                           textvariable=self.plot_type_var,
-                                           state="readonly",
-                                           values=[])
+        self.plot_type_var = tk.StringVar(value="")
+        self.plot_type_menu = ttk.Combobox(
+            plot_type_frame,
+            textvariable=self.plot_type_var,
+            state="readonly",
+            values=[],
+        )
         self.plot_type_menu.pack(side=tk.LEFT, expand=True)
         self.plot_type_menu.bind("<<ComboboxSelected>>", self.update_plot_settings)
 
@@ -724,8 +833,8 @@ class OpenOBSApp(tk.Tk):
         self.plot_settings_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Create a matplotlib figure and axis and add it to the plot tab
-        self.fig, self.ax = plt.subplots()  #figsize=(8, 4))
-        self.plot_canvas = FigureCanvasTkAgg(self.fig, master=plot_tab)
+        self.plot_fig, self.plot_ax = plt.subplots()  # figsize=(8, 4))
+        self.plot_canvas = FigureCanvasTkAgg(self.plot_fig, master=plot_tab)
         self.plot_canvas_widget = self.plot_canvas.get_tk_widget()
         self.plot_canvas_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
@@ -733,8 +842,8 @@ class OpenOBSApp(tk.Tk):
         self.plot_types = get_valid_plots(self.sensor.name)
         plots_list = list(self.plot_types.keys())
 
-        self.plot_type_menu['values'] = plots_list
-        if self.plot_type_var.get() == '':
+        self.plot_type_menu["values"] = plots_list
+        if self.plot_type_var.get() == "":
             self.plot_type_var.set(plots_list[0])
 
         self.update_plot_settings()
@@ -745,7 +854,63 @@ class OpenOBSApp(tk.Tk):
 
         plot_name = self.plot_type_var.get()
         plot_class = self.plot_types[plot_name]
-        self.plot = plot_class(self.plot_canvas, self.fig, self.ax, self.plot_settings_frame)
+        self.plot = plot_class(
+            self.plot_canvas, self.plot_fig, self.plot_ax, self.plot_settings_frame
+        )
+
+    def configure_calibration_types(self, calibrate_tab):
+        # Layout the controls in the plotting tab
+        cal_controls_frame = ttk.Frame(calibrate_tab)
+        cal_controls_frame.pack(fill=tk.X)
+
+        # Area for selecting plot type
+        cal_type_frame = ttk.Frame(cal_controls_frame)
+        cal_type_frame.pack(side=tk.LEFT, fill=tk.X)
+
+        ttk.Label(cal_type_frame, text="Select calibration:").pack(side=tk.LEFT)
+        self.cal_type_var = tk.StringVar(value="")
+        self.cal_type_menu = ttk.Combobox(
+            cal_type_frame, textvariable=self.cal_type_var, state="readonly", values=[]
+        )
+        self.cal_type_menu.pack(side=tk.LEFT)
+        self.cal_type_menu.bind(
+            "<<ComboboxSelected>>", self.update_calibration_settings
+        )
+
+        btn_cal_reset = ttk.Button(
+            cal_controls_frame, text="Reset", command=self.update_calibration_settings
+        )
+        btn_cal_reset.pack(side=tk.LEFT, expand=True)
+
+        # Area for specific plot type settings
+        self.cal_settings_frame = ttk.Frame(cal_controls_frame)
+        self.cal_settings_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Create a matplotlib figure and axis and add it to the cal tab
+        self.cal_fig, self.cal_ax = plt.subplots()  # figsize=(8, 4))
+        self.cal_canvas = FigureCanvasTkAgg(self.cal_fig, master=calibrate_tab)
+        self.cal_canvas_widget = self.cal_canvas.get_tk_widget()
+        self.cal_canvas_widget.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def update_calibration_types(self):
+        self.cal_types = get_valid_calibrations(self.sensor.name)
+        cal_list = list(self.cal_types.keys())
+
+        self.cal_type_menu["values"] = cal_list
+        if self.cal_type_var.get() == "":
+            self.cal_type_var.set(cal_list[0])
+
+        self.update_calibration_settings()
+
+    def update_calibration_settings(self, event=None):
+        for widget in self.cal_settings_frame.winfo_children():
+            widget.destroy()
+
+        cal_name = self.cal_type_var.get()
+        cal_class = self.cal_types[cal_name]
+        self.cal = cal_class(
+            self.cal_canvas, self.cal_fig, self.cal_ax, self.cal_settings_frame
+        )
 
     def configure_sensor_settings(self):
         for widget in self.sensors_frame.winfo_children():
@@ -753,21 +918,28 @@ class OpenOBSApp(tk.Tk):
 
         self.sensor = make_sensor_obj(self.sensor_type, self.sensors_frame)
         self.update_plot_types()
+        self.update_calibration_types()
 
     def toggle_file_logging(self):
         if not self.is_logging_to_file:
-            file_path = filedialog.asksaveasfilename(defaultextension=".txt",
-                                                     filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-                                                     title="Save Log As")
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
+                title="Save Log As",
+            )
             if file_path:
                 try:
                     self.log_file_object = open(file_path, "w")
                     self.log_file_path = file_path
                     self.is_logging_to_file = True
                     self.btn_toggle_file_log.config(text="Stop Logging to File")
-                    self.log_text(f"Logging to file: {self.log_file_path}", "center", "info")
+                    self.log_text(
+                        f"Logging to file: {self.log_file_path}", "center", "info"
+                    )
                 except IOError as e:
-                    messagebox.showerror("File Error", f"Could not open file for logging:\n{e}")
+                    messagebox.showerror(
+                        "File Error", f"Could not open file for logging:\n{e}"
+                    )
                     self.log_file_path = None
                     self.log_file_object = None
             else:  # User cancelled
@@ -778,7 +950,9 @@ class OpenOBSApp(tk.Tk):
                     self.log_file_object.close()
                 except IOError as e:
                     messagebox.showerror("File Error", f"Error closing log file:\n{e}")
-            self.log_text(f"Stopped logging to file: {self.log_file_path}", "center", "info")
+            self.log_text(
+                f"Stopped logging to file: {self.log_file_path}", "center", "info"
+            )
             self.is_logging_to_file = False
             self.log_file_object = None
             self.log_file_path = None
@@ -786,11 +960,15 @@ class OpenOBSApp(tk.Tk):
 
     def toggle_communicator(self):
         """Switches between TestCommunicator and SerialCommunicator based on the checkbox state."""
-        if self.use_test_communicator.get():
-            self.ser_com = TestCommunicator(self.log_text, self.process_received_sentence)
+        if self.use_test_comm.get():
+            self.ser_com = TestCommunicator(
+                self.log_text, self.process_received_sentence
+            )
             self.log_text("Switched to TestCommunicator.", "center", "info")
         else:
-            self.ser_com = SerialCommunicator(self.log_text, self.process_received_sentence)
+            self.ser_com = SerialCommunicator(
+                self.log_text, self.process_received_sentence
+            )
             self.log_text("Switched to SerialCommunicator.", "center", "info")
 
     def on_closing(self):
