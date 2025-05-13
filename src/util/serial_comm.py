@@ -12,7 +12,7 @@ class SerialCommunicator:
         - message: Complete string sent through serial
         - sentence: The message after removing the leading $ and trailing checksum
         - words: List of commands and values that comprise the sentence.
-    
+
     """
 
     def __init__(self, log_callback, sentence_callback):
@@ -20,7 +20,9 @@ class SerialCommunicator:
         self.serial_thread = None
         self.stop_thread = False
         self.log_callback = log_callback  # Function to log messages
-        self.sentence_callback = sentence_callback  # Function to process received messages
+        self.sentence_callback = (
+            sentence_callback  # Function to process received messages
+        )
         self.data_queue = queue.Queue()  # Thread-safe queue for incoming data
 
     def open_connection(self, port, baudrate=250000, timeout=0.1):
@@ -35,7 +37,9 @@ class SerialCommunicator:
             self.serial_port.open()
 
             self.stop_thread = False
-            self.serial_thread = threading.Thread(target=self.read_serial_data, daemon=True)
+            self.serial_thread = threading.Thread(
+                target=self.read_serial_data, daemon=True
+            )
             self.serial_thread.start()
             self.log_callback("Attempting connection...", "center")
 
@@ -70,7 +74,7 @@ class SerialCommunicator:
 
         message = f"${sentence}*{calculate_checksum(sentence)}\r\n"
         try:
-            self.serial_port.write(message.encode('ascii'))
+            self.serial_port.write(message.encode("ascii"))
             self.log_callback(f"Sent: {message.strip()}", "right", "debug")
         except serial.SerialException as e:
             self.log_callback(f"Serial Write Error: {e}", "center", "error")
@@ -87,33 +91,34 @@ class SerialCommunicator:
 
                 if self.serial_port.in_waiting > 0:
                     try:
-                        data = self.serial_port.read(self.serial_port.in_waiting).decode('ascii', errors='ignore')
+                        data = self.serial_port.read(
+                            self.serial_port.in_waiting
+                        ).decode("ascii", errors="ignore")
                         buffer += data
                     except serial.SerialException as read_err:
-                        # Handle specific read errors (like device disconnect during read)
-                        self.log_callback(f"Serial Read Error: {read_err}", "center", "error")
-                        self.close_connection()  # Trigger disconnect logic
-                        break  # Exit thread on read error
+                        self.log_callback(
+                            f"Serial Read Error: {read_err}", "center", "error"
+                        )
+                        self.close_connection()
+                        break
 
                     # Process complete messages (terminated by newline)
-                    while '\n' in buffer:
-                        line, buffer = buffer.split('\n', 1)
+                    for line in buffer.split("\n")[:-1]:
                         message = line.strip()
                         if message:
-                            self.log_callback(f"{message}", "left", "debug")
-
+                            self.log_callback(message, "left", "debug")
                             sentence = self.get_sentence(message)
                             if sentence:
                                 if sentence.startswith("DATA"):
-                                    self.data_queue.put(sentence)  # Push to queue for other messages
+                                    self.data_queue.put(sentence)
                                 else:
-                                    # Bypass queue for critical messages like OPENOBS
                                     self.sentence_callback(sentence)
 
-            except serial.SerialException as e:
-                self.log_callback(f"Serial Exception: {e}", "center", "error")
-                break
-            except Exception as e:
+                    buffer = buffer.split("\n")[
+                        -1
+                    ]  # Keep the remaining incomplete part
+
+            except (serial.SerialException, Exception) as e:
                 self.log_callback(f"Unexpected Read Error: {e}", "center", "error")
                 break
 
@@ -124,14 +129,16 @@ class SerialCommunicator:
             if message.startswith("HEADERS") or message.startswith("DATA"):
                 sentence = message
             elif validate_checksum(message):
-                start_idx = message.index('$')
-                end_idx = message.rindex('*')  # Use last '*' for robustness
-                sentence = message[start_idx + 1:end_idx]
+                start_idx = message.index("$")
+                end_idx = message.rindex("*")  # Use last '*' for robustness
+                sentence = message[start_idx + 1 : end_idx]
             else:
                 self.log_callback(f"Invalid Checksum: {message}", "left", "error")
 
         except Exception as e:
-            self.log_callback(f"Error parsing message '{message}': {e}", "left", "error")
+            self.log_callback(
+                f"Error parsing message '{message}': {e}", "left", "error"
+            )
 
         return sentence
 

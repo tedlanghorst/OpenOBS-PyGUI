@@ -1,14 +1,18 @@
 from abc import ABC, abstractmethod
 from tkinter import ttk
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class BasePlot(ABC):
-
-    def __init__(self, canvas: FigureCanvasTkAgg, fig: Figure, ax: Axes, controls_frame: ttk.Frame):
+    def __init__(
+        self,
+        canvas: FigureCanvasTkAgg,
+        fig: Figure,
+        ax: Axes,
+        controls_frame: ttk.Frame,
+    ):
         self.canvas = canvas
         self.fig = fig
         self.ax = ax

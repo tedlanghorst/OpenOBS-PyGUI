@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 
 
 class BaseSensor(ABC):
-
     def __init__(self, name: str, parent_frame):
         self.name = name
         self.configure_gui(parent_frame)

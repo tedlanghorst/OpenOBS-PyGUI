@@ -11,13 +11,15 @@ class TestCommunicator:
         - message: Complete string sent through serial
         - sentence: The message without the leading $ and trailing checksum
         - words: List of commands and values that comprise the sentence.
-    
+
     """
 
     def __init__(self, log_callback, sentence_callback):
         self.is_open = False
         self.log_callback = log_callback  # Function to log messages
-        self.sentence_callback = sentence_callback  # Function to process received messages
+        self.sentence_callback = (
+            sentence_callback  # Function to process received messages
+        )
         self.data_queue = queue.Queue()  # Thread-safe queue for incoming data
         self._stop_thread = threading.Event()  # Event to stop the background thread
         self._background_thread = None  # Thread for sending periodic messages
@@ -29,7 +31,7 @@ class TestCommunicator:
 
         self.is_open = True
         self.sentence_callback("OPENOBS,000")  # Initial handshake from sensor
-        self.log_callback("OPENOBS,000", 'left', 'debug')
+        self.log_callback("OPENOBS,000", "left", "debug")
         self.log_callback("Attempting connection...", "center")
 
     def close_connection(self):
@@ -75,7 +77,9 @@ class TestCommunicator:
 
         def send_data():
             # Send data headers first
-            self.sentence_callback("HEADERS,time,millis,ambient_light,backscatter,pressure,water_temp,battery")
+            self.sentence_callback(
+                "HEADERS,time,millis,ambient_light,backscatter,pressure,water_temp,battery"
+            )
             while not self._stop_thread.is_set():
                 current_time = time.time()
                 elapsed_time = current_time - start_time
@@ -88,10 +92,10 @@ class TestCommunicator:
                 water_temp = noisy_sinusoid(1000, 100, 0.1, elapsed_time)
 
                 # Generate noisy data for battery
-                battery = 100 + np.random.normal(5)
+                battery = int(100 + np.random.normal(5))
 
                 # Format the data string
-                data_string = f"DATA,{elapsed_time},{millis},{ambient_light},{backscatter},{pressure},{water_temp},{battery}"
+                data_string = f"DATA,{int(current_time)},{millis},{ambient_light},{backscatter},{pressure},{water_temp},{battery}"
 
                 # Send the data string
                 self.data_queue.put(data_string)

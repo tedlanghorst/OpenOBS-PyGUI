@@ -5,7 +5,6 @@ import pandas as pd
 
 
 class ScatterPlot(BasePlot):
-
     @classmethod
     def valid_sensors(cls):
         return "any"  # works with data from any sensor type.
@@ -17,7 +16,9 @@ class ScatterPlot(BasePlot):
     def __init__(self, *args):
         self.df = pd.DataFrame()
         self.max_time_steps = 30
-        self.num_samples_var = tk.StringVar(value=str(self.max_time_steps))  # Default value for number of samples
+        self.num_samples_var = tk.StringVar(
+            value=str(self.max_time_steps)
+        )  # Default value for number of samples
         self.lines = []  # Store line objects for updates
 
         super().__init__(*args)
@@ -28,12 +29,16 @@ class ScatterPlot(BasePlot):
         self.x_var.set(variable_choices[0] if variable_choices else "")
         self.y_var.set(variable_choices[1] if len(variable_choices) > 1 else "")
 
-        self.x_dropdown['menu'].delete(0, 'end')
-        self.y_dropdown['menu'].delete(0, 'end')
+        self.x_dropdown["menu"].delete(0, "end")
+        self.y_dropdown["menu"].delete(0, "end")
 
         for choice in variable_choices:
-            self.x_dropdown['menu'].add_command(label=choice, command=lambda value=choice: self.x_var.set(value))
-            self.y_dropdown['menu'].add_command(label=choice, command=lambda value=choice: self.y_var.set(value))
+            self.x_dropdown["menu"].add_command(
+                label=choice, command=lambda value=choice: self.x_var.set(value)
+            )
+            self.y_dropdown["menu"].add_command(
+                label=choice, command=lambda value=choice: self.y_var.set(value)
+            )
 
     def _get_num_samples(self):
         try:
@@ -42,9 +47,13 @@ class ScatterPlot(BasePlot):
                 raise ValueError("Number of samples must be positive.")
             self.max_time_steps = num_samples
             if len(self.df) > self.max_time_steps:
-                self.df = self.df.iloc[-self.max_time_steps:]  # Trim to the last `max_time_steps` rows
+                self.df = self.df.iloc[
+                    -self.max_time_steps :
+                ]  # Trim to the last `max_time_steps` rows
         except ValueError:
-            messagebox.showerror("Input Error", "Invalid input. Please enter a positive integer.")
+            messagebox.showerror(
+                "Input Error", "Invalid input. Please enter a positive integer."
+            )
 
     def _setup_controls(self):
         # Dropdowns for selecting X and Y variables
@@ -65,7 +74,9 @@ class ScatterPlot(BasePlot):
         tk.Label(n_samples_frame, text="# of samples:").grid(row=0, column=0)
         num_samples_entry = tk.Entry(n_samples_frame, textvariable=self.num_samples_var)
         num_samples_entry.grid(row=1, column=2)
-        tk.Button(n_samples_frame, text="Submit", command=self._get_num_samples).grid(row=2, column=2)
+        tk.Button(n_samples_frame, text="Submit", command=self._get_num_samples).grid(
+            row=2, column=2
+        )
         self._get_num_samples()
 
     def _setup_axes(self):

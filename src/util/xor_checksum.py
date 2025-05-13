@@ -8,20 +8,19 @@ def calculate_checksum(sentence: str) -> str:
 
 def validate_checksum(message: str) -> bool:
     """Validates the checksum of a received NMEA-style message."""
-    if not message or '$' not in message or '*' not in message:
+    if not message or "$" not in message or "*" not in message:
         return False
 
     try:
-        start_idx = message.index('$')
-        # Find last asterisk for checksum
-        end_idx = message.rindex('*')
+        start_idx = message.index("$")
+        end_idx = message.rindex("*")
 
         if start_idx >= end_idx or end_idx + 3 > len(message):
             return False  # Invalid structure or not enough chars for checksum
 
-        sentence = message[start_idx + 1:end_idx]
+        sentence = message[start_idx + 1 : end_idx]
         expected_checksum = calculate_checksum(sentence)
-        provided_checksum = message[end_idx + 1:end_idx + 3]
+        provided_checksum = message[end_idx + 1 : end_idx + 3]
 
         return expected_checksum.upper() == provided_checksum.upper()
     except ValueError:
