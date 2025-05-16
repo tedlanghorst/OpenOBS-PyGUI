@@ -12,8 +12,8 @@ def get_valid_plots(sensor_type: str) -> dict[str, BasePlot]:
     valid_plots = {}
 
     for plot_class in plot_classes:
-        valid_sensors = plot_class.valid_sensors()
+        valid_sensors = plot_class._valid_sensors
         if sensor_type in valid_sensors or valid_sensors == "any":
-            valid_plots[plot_class.get_pretty_name()] = plot_class
+            valid_plots[plot_class._name] = plot_class
 
     return valid_plots

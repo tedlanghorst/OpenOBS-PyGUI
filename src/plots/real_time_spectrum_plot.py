@@ -5,13 +5,8 @@ from tkinter import ttk
 
 
 class RealTimeSpectrumPlot(BasePlot):
-    @classmethod
-    def valid_sensors(cls):
-        return ["AS7265X"]
-
-    @classmethod
-    def get_pretty_name(cls):
-        return "Real-Time Spectrum"
+    _valid_sensors = ["AS7265X"]
+    _name = "Real-Time Spectrum"
 
     def __init__(self, *args):
         self.bands = [410,435,460,485,510,535,560,585,610,645,680,705,730,760,810,860,900,940]  # fmt: skip
@@ -50,8 +45,8 @@ class RealTimeSpectrumPlot(BasePlot):
         if self.data_memory:
             self.update(self.data_memory)
 
-    def update(self, data: dict):
-        self.data_memory = data
+    def update(self, data: list[dict]):
+        self.data_memory = data[-1]  # Just take the last data entry.
         # Clear all existing lines on axes
         for line in self.ax.lines:
             line.remove()

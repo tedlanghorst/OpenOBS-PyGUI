@@ -6,6 +6,9 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class BasePlot(ABC):
+    _valid_sensors = "any"  # Can specify a list, e.g. ['VCNL4010','ExampleSensor2']
+    _name = "base"
+
     def __init__(
         self,
         canvas: FigureCanvasTkAgg,
@@ -22,18 +25,6 @@ class BasePlot(ABC):
         self._setup_controls()
         self._setup_axes()
 
-    @classmethod
-    @abstractmethod
-    def valid_sensors(cls) -> list[str]:
-        """Returns a list of valid sensors for the plot."""
-        pass
-
-    @classmethod
-    @abstractmethod
-    def get_pretty_name(cls) -> str:
-        """Returns a human-readable name for the plot."""
-        pass
-
     @abstractmethod
     def _setup_controls(self):
         """Sets up the controls area."""
@@ -45,6 +36,6 @@ class BasePlot(ABC):
         pass
 
     @abstractmethod
-    def update(self, data):
+    def update(self, data: list[dict]):
         """Update the plot with new data."""
         pass

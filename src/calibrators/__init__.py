@@ -10,8 +10,8 @@ def get_valid_calibrations(sensor_type: str) -> dict[str, BaseCalibrator]:
     valid_cals = {}
 
     for cal_class in cal_classes:
-        valid_sensors = cal_class.valid_sensors()
+        valid_sensors = cal_class._valid_sensors
         if sensor_type in valid_sensors or valid_sensors == "any":
-            valid_cals[cal_class.get_pretty_name()] = cal_class
+            valid_cals[cal_class._name] = cal_class
 
     return valid_cals

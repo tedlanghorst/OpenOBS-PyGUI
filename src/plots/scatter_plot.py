@@ -5,13 +5,8 @@ import pandas as pd
 
 
 class ScatterPlot(BasePlot):
-    @classmethod
-    def valid_sensors(cls):
-        return "any"  # works with data from any sensor type.
-
-    @classmethod
-    def get_pretty_name(cls):
-        return "Scatter"
+    _valid_sensors = "any"
+    _name = "Scatter"
 
     def __init__(self, *args):
         self.df = pd.DataFrame()
@@ -85,17 +80,18 @@ class ScatterPlot(BasePlot):
         self.ax.set_xlabel("Sample #")
         self.ax.grid(True, linestyle=":", alpha=0.6)
 
-    def update(self, data):
+    def update(self, data: list[dict]):
         """Update the scatter plot."""
         if data:
-            new_df = pd.DataFrame(data, index=[0])
+            new_df = pd.DataFrame(data, index=range(len(data)))
             if len(self.df) == 0:
                 self.df = new_df
                 self._update_variable_choices()
             else:
                 self.df = pd.concat([self.df, new_df], ignore_index=True)
                 if len(self.df) > self.max_time_steps:
-                    self.df = self.df.iloc[1:]
+                    # Trim to the last `max_time_steps` rows
+                    self.df = self.df.iloc[-self.max_time_steps :]
 
         # Clear all existing scatter plots on axes
         for collection in self.ax.collections:

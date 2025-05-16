@@ -99,7 +99,7 @@ class TestCommunicator:
 
                 # Send the data string
                 self.data_queue.put(data_string)
-                time.sleep(0.1)  # Wait for 0.1 seconds
+                time.sleep(0.01)  # Wait for 0.1 seconds
 
         self._stop_thread.clear()
         self._background_thread = threading.Thread(target=send_data, daemon=True)

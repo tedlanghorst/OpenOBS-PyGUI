@@ -1,10 +1,14 @@
 from ._base_calibrator import BaseCalibrator
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, filedialog, messagebox
 import numpy as np
+import json
 
 
 class SingleVariableLinear(BaseCalibrator):
+    _valid_sensors = "any"
+    _name = "Single Value Linear"
+
     def __init__(self, *args):
         self.var_choices = []
         self.calibration_target = tk.StringVar()
@@ -12,18 +16,15 @@ class SingleVariableLinear(BaseCalibrator):
         self.records = {}
         self.var_name = tk.StringVar()
         self.unit_name = tk.StringVar()
+        self.m = None
+        self.b = None
         super().__init__(*args)
 
-    @classmethod
-    def valid_sensors(cls) -> list[str]:
-        return "any"
-
-    @classmethod
-    def get_pretty_name(cls) -> str:
-        return "Single Value Linear"
-
     def _setup_axes(self):
-        pass
+        """Set up the axes with labels and grid."""
+        self.ax.set_xlabel("Standard")
+        self.ax.set_ylabel("Measured Value")
+        self.ax.grid(True, linestyle=":", alpha=0.6)
 
     def _update_variable_choices(self):
         # Update the options for the X and Y variable dropdowns
@@ -56,7 +57,13 @@ class SingleVariableLinear(BaseCalibrator):
         )
         self.btn_record.grid(row=1, column=0, columnspan=2)
         btn_fit = ttk.Button(recording_frame, text="Fit Model", command=self._fit_lm)
-        btn_fit.grid(row=2, column=0, columnspan=2)
+        btn_fit.grid(row=2, column=0)
+
+        self.btn_save = ttk.Button(
+            recording_frame, text="Save Model", command=self._save_model
+        )
+        self.btn_save.grid(row=2, column=1)
+        self.btn_save.config(state="disabled")  # Initially disable the save button
 
         # Ensure the frames expand properly
         self.controls_frame.columnconfigure(0, weight=1)
@@ -93,32 +100,50 @@ class SingleVariableLinear(BaseCalibrator):
             )
             return
 
-        # Prepare data for fitting
-        x = []
-        y = []
-        for key, values in self.records.items():
-            x.extend([key] * len(values))
-            y.extend(values)
-        x = np.array(x)
-        y = np.array(y)
-
         # Perform linear regression
+        x, y = self._get_data_arrays()
         A = np.vstack([x, np.ones(len(x))]).T
-        m, c = np.linalg.lstsq(A, y, rcond=None)[0]
+        self.m, self.b = np.linalg.lstsq(A, y, rcond=None)[0]
 
-        print(f"Fitted line: y = {m}x + {c}")
+        # Enable the save button after fitting
+        self.btn_save.config(state="normal")
 
-        y_hat = m * x + c
+        y_hat = self.m * x + self.b
         self.ax.plot(x, y_hat, c="red")
         self.canvas.draw()
 
-    def update(self, data):
+    def _save_model(self):
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save Model As",
+        )
+        if not file_path:
+            return
+
+        # Save raw data and model coefficients
+        data_to_save = {
+            "cal_type": self.get_pretty_name(),
+            "cal_model": {"slope": self.m, "intercept": self.b},
+            "measured_variable": self.var_name.get(),
+            "cal_unit": self.unit_name.get(),
+            "raw_data": self.records,
+        }
+
+        with open(file_path, "w") as json_file:
+            json.dump(data_to_save, json_file, indent=4)
+
+    def update(self, data_list: list[dict]):
         if len(self.var_choices) == 0:
-            self.var_choices = list(data.keys())
+            self.var_choices = list(data_list[0].keys())
             self._update_variable_choices()
 
-        if self.recording_key:
-            # Collect data if recording
+        # No need to update the plot or store data not used for calibration.
+        if not self.recording_key:
+            return
+
+        # Collect data
+        for data in data_list:
             if self.var_name.get() in data:
                 value = data[self.var_name.get()]
                 if self.recording_key not in self.records:
@@ -132,12 +157,16 @@ class SingleVariableLinear(BaseCalibrator):
         # Reset the color cycle
         self.ax.set_prop_cycle(None)
 
-        # Prepare data for plotting
+        x, y = self._get_data_arrays()
+        self.ax.scatter(x, y, alpha=0.7)
+        self.canvas.draw()
+
+    def _get_data_arrays(self):
+        """Helper function for getting arrays instead of dict"""
         x = []
         y = []
         for key, values in self.records.items():
             x.extend([key] * len(values))
             y.extend(values)
 
-        self.ax.scatter(x, y, alpha=0.7)
-        self.canvas.draw()
+        return np.array(x), np.array(y)

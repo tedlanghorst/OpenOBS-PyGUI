@@ -21,7 +21,7 @@ ON_CURRENT = 10.8
 OFF_CURRENT = 0.05
 ON_TIME = 0.96
 TEXT_COLUMNS = 60  # Adjusted for typical Python font widths
-UPDATE_INTERVAL_MS = 10  # Adjust the interval as needed
+UPDATE_INTERVAL_MS = 100  # Adjust the interval as needed
 
 
 class OpenOBSApp(tk.Tk):
@@ -55,7 +55,7 @@ class OpenOBSApp(tk.Tk):
         self.cb_delay_var = tk.BooleanVar()
         self.battery_mah = tk.IntVar(value=2000)
         self.custom_battery_mah = tk.StringVar(value="2000")
-        self.column_headers = []
+        self.data_headers = []
         self.debug_mode = tk.BooleanVar(value=True)  # Add debug mode variable
         self.use_test_comm = tk.BooleanVar(
             value=False
@@ -339,7 +339,7 @@ class OpenOBSApp(tk.Tk):
         # Add a new checkbox for using TestCommunicator
         self.cb_use_test_comm = ttk.Checkbutton(
             debug_frame,
-            text="Use TestCommunicator",
+            text="Test without sensor",
             variable=self.use_test_comm,
             command=self.toggle_communicator,
         )
@@ -352,15 +352,24 @@ class OpenOBSApp(tk.Tk):
         """Process data from the serial communicator's queue."""
         queue_size = self.ser_com.data_queue.qsize()
         if queue_size > 50:  # Example threshold for a warning
-            self.log_text(
-                f"Warning: Serial queue size is high ({queue_size} items).",
-                "center",
-                "error",
-            )
+            self.log_error(f"Warning: Serial queue size is high ({queue_size} items).")
 
+        data_list = []
         while not self.ser_com.data_queue.empty():
             sentence = self.ser_com.data_queue.get()
-            self.process_received_sentence(sentence)
+            parts = sentence.split(",")
+
+            if parts[0] != "DATA":
+                self.log_error(f"Non data message passed to data queue: {sentence}")
+                return
+
+            data = {k: float(p) for k, p in zip(self.data_headers, parts[1:])}
+            data_list.append(data)
+            self.log_text(",".join(parts[1:]), "left")
+
+        if data_list:
+            self.plot.update(data_list)
+            self.cal.update(data_list)
 
         # Schedule the next queue processing
         self.after(UPDATE_INTERVAL_MS, self.process_data_queue)
@@ -550,10 +559,8 @@ class OpenOBSApp(tk.Tk):
             delay_seconds = (start_dt - now_dt).total_seconds()
 
             if delay_seconds < 0:
-                self.log_text(
-                    "Warning: Delay start time is in the past. Delay set to 0.",
-                    "center",
-                    "error",
+                self.log_error(
+                    "Warning: Delay start time is in the past. Delay set to 0."
                 )
                 return 0
             else:
@@ -614,27 +621,25 @@ class OpenOBSApp(tk.Tk):
             self.log_text("--- Sample Readings ---", "center")
 
         elif command == "HEADERS":
-            self.column_headers = parts[1:]  # Store headers for later use
-            self.log_text(f"Headers: {', '.join(self.column_headers)}", "center")
+            self.data_headers = parts[1:]  # Store headers for later use
+            self.log_text(f"Headers: {', '.join(self.data_headers)}", "center")
             if self.is_logging_to_file and self.log_file_object:
                 try:
                     self.log_file_object.write(",".join(parts[1:]) + "\n")
                     self.log_file_object.flush()
                 except IOError as e:
-                    self.log_text(f"File logging error: {e}", "left", "error")
-
-        elif command == "DATA":
-            data = {k: float(p) for k, p in zip(self.column_headers, parts[1:])}
-            self.plot.update(data)  # Update the plot with the new data
-            self.cal.update(data)
-            self.log_text(",".join(parts[1:]), "left")
+                    self.log_error(f"File logging error: {e}")
 
         # Handle potential error messages
         elif command == "SDINIT" and len(parts) > 1 and parts[1] == "0":
-            self.log_text("SD Card Error: Initialization failed!", "center", "error")
-            self.log_text("Check for missing or corrupted SD card.", "center", "error")
+            self.log_error("SD Card Error: Initialization failed!")
+            self.log_error("Check for missing or corrupted SD card.")
+
         elif command == "CLKINIT" and len(parts) > 1 and parts[1] == "0":
-            self.log_text("RTC Error: Clock initialization failed!", "center", "error")
+            self.log_error("RTC Error: Clock initialization failed!")
+
+        else:
+            self.log_error(f"Unknown serial message {sentence}")
 
     def update_battery(self):
         """Calculates and displays the estimated battery life."""
@@ -759,7 +764,7 @@ class OpenOBSApp(tk.Tk):
                     "Upload Success", f"Successfully uploaded {file_path} to {port}."
                 )
             else:
-                self.log_text(f"Upload Failed: {result.stderr}", "center", "error")
+                self.log_error(f"Upload Failed: {result.stderr}")
                 messagebox.showerror(
                     "Upload Failed",
                     f"An error occurred during upload:\n{result.stderr}",
@@ -769,11 +774,11 @@ class OpenOBSApp(tk.Tk):
             messagebox.showerror(
                 "Upload Error", "avrdude not found. Please install it and try again."
             )
-            self.log_text("Error: avrdude not found.", "center", "error")
+            self.log_error("Error: avrdude not found.")
 
         except Exception as e:
             messagebox.showerror("Upload Failed", f"An unexpected error occurred:\n{e}")
-            self.log_text(f"Upload Failed: {e}", "center", "error")
+            self.log_error(f"Upload Failed: {e}")
 
     def log_text(self, message: str, justification: str = "left", tag: str = None):
         """Appends text to the serial log Text widget."""
@@ -798,6 +803,9 @@ class OpenOBSApp(tk.Tk):
             print(f"Error updating log widget: {e}")
         except Exception as e:
             print(f"Unexpected error logging: {e}")
+
+    def log_error(self, message):
+        self.log_text(message, "center", "error")
 
     def _get_tag(self, justification: str, tag: str) -> str:
         """Determines the appropriate tag based on justification and additional tags."""
@@ -864,23 +872,24 @@ class OpenOBSApp(tk.Tk):
         cal_controls_frame.pack(fill=tk.X)
 
         # Area for selecting plot type
-        cal_type_frame = ttk.Frame(cal_controls_frame)
+        cal_type_frame = ttk.LabelFrame(
+            cal_controls_frame, text="Type", padding=(10, 5)
+        )
         cal_type_frame.pack(side=tk.LEFT, fill=tk.X)
 
-        ttk.Label(cal_type_frame, text="Select calibration:").pack(side=tk.LEFT)
         self.cal_type_var = tk.StringVar(value="")
         self.cal_type_menu = ttk.Combobox(
             cal_type_frame, textvariable=self.cal_type_var, state="readonly", values=[]
         )
-        self.cal_type_menu.pack(side=tk.LEFT)
+        self.cal_type_menu.pack()
         self.cal_type_menu.bind(
             "<<ComboboxSelected>>", self.update_calibration_settings
         )
 
         btn_cal_reset = ttk.Button(
-            cal_controls_frame, text="Reset", command=self.update_calibration_settings
+            cal_type_frame, text="Reset", command=self.update_calibration_settings
         )
-        btn_cal_reset.pack(side=tk.LEFT, expand=True)
+        btn_cal_reset.pack()
 
         # Area for specific plot type settings
         self.cal_settings_frame = ttk.Frame(cal_controls_frame)
