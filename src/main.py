@@ -39,7 +39,7 @@ class OpenOBSApp(tk.Tk):
 
         self.title("OpenOBS Python GUI")
         # Set an icon for the popup window
-        self.iconbitmap("sensorIcon.ico")
+        self.iconbitmap("sensorIcon.icns")
         self.geometry(f"{window_width}x{window_height}")
 
         # --- Member Variables ---
