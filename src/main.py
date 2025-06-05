@@ -1,5 +1,7 @@
+import sys
 import tkinter as tk
 from tkinter import ttk, scrolledtext, filedialog, messagebox
+from PIL import Image, ImageTk
 import serial
 import serial.tools.list_ports
 import time
@@ -38,8 +40,15 @@ class OpenOBSApp(tk.Tk):
         self.geometry(f"{window_width}x{window_height}+{x}+{y}")
 
         self.title("OpenOBS Python GUI")
-        # Set an icon for the popup window
-        self.iconbitmap("sensorIcon.icns")
+        
+        # Set the window icon if available
+        try:
+            im = Image.open("./src/sensorIcon.png")
+            photo = ImageTk.PhotoImage(im)
+            self.wm_iconphoto(True, photo)
+        except Exception as e:
+            print(f"Could not set window icon: {e}")
+        
         self.geometry(f"{window_width}x{window_height}")
 
         # --- Member Variables ---
