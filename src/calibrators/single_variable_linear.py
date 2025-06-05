@@ -123,10 +123,10 @@ class SingleVariableLinear(BaseCalibrator):
 
         # Save raw data and model coefficients
         data_to_save = {
-            "cal_type": self._name,
-            "cal_model": {"slope": self.m, "intercept": self.b},
-            "measured_variable": self.var_name.get(),
-            "cal_unit": self.unit_name.get(),
+            "type": self._name,
+            "variable": self.var_name.get(),
+            "unit": self.unit_name.get(),
+            "model": {"slope": self.m, "intercept": self.b},
             "raw_data": self.records,
         }
 
