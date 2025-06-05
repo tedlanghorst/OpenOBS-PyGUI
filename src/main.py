@@ -65,7 +65,7 @@ class OpenOBSApp(tk.Tk):
         self.battery_mah = tk.IntVar(value=2000)
         self.custom_battery_mah = tk.StringVar(value="2000")
         self.data_headers = []
-        self.debug_mode = tk.BooleanVar(value=True)  # Add debug mode variable
+        self.debug_mode = tk.BooleanVar(value=False)  # Add debug mode variable
         self.use_test_comm = tk.BooleanVar(
             value=False
         )  # Add TestCommunicator toggle variable

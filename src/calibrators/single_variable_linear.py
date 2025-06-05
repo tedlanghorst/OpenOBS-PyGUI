@@ -71,7 +71,7 @@ class SingleVariableLinear(BaseCalibrator):
         recording_frame.columnconfigure(1, weight=1)
 
     def _toggle_recording(self):
-        if self.recording_key:
+        if self.recording_key is not None:
             # Stop recording
             self.recording_key = None
             self.btn_record.config(text="Begin Recording")
@@ -123,7 +123,7 @@ class SingleVariableLinear(BaseCalibrator):
 
         # Save raw data and model coefficients
         data_to_save = {
-            "cal_type": self.get_pretty_name(),
+            "cal_type": self._name,
             "cal_model": {"slope": self.m, "intercept": self.b},
             "measured_variable": self.var_name.get(),
             "cal_unit": self.unit_name.get(),
@@ -139,7 +139,7 @@ class SingleVariableLinear(BaseCalibrator):
             self._update_variable_choices()
 
         # No need to update the plot or store data not used for calibration.
-        if not self.recording_key:
+        if self.recording_key is None:
             return
 
         # Collect data
