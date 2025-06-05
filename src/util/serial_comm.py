@@ -111,6 +111,10 @@ class SerialCommunicator:
                             if sentence:
                                 if sentence.startswith("DATA"):
                                     self.data_queue.put(sentence)
+                                elif sentence.split(',')[0].isdigit(): 
+                                    # Backwards compatibility
+                                    # If the first word is a number, treat it as a data message
+                                    self.data_queue.put("DATA," + sentence)
                                 else:
                                     self.sentence_callback(sentence)
 

@@ -371,7 +371,7 @@ class OpenOBSApp(tk.Tk):
             if parts[0] != "DATA":
                 self.log_error(f"Non data message passed to data queue: {sentence}")
                 return
-
+            
             data = {k: float(p) for k, p in zip(self.data_headers, parts[1:])}
             data_list.append(data)
             self.log_text(",".join(parts[1:]), "left")
@@ -610,6 +610,7 @@ class OpenOBSApp(tk.Tk):
             if command == "READY":
                 # For backwards compatibility
                 self.sensor_type = "VCNL4010"
+                self.data_headers = ["time","millis","ambient_light","backscatter","pressure","water_temp","battery"]
             else:
                 self.sensor_type = parts[1].strip()
 
@@ -630,8 +631,10 @@ class OpenOBSApp(tk.Tk):
             self.log_text("--- Sample Readings ---", "center")
 
         elif command == "HEADERS":
+            # Store headers for later use
             self.data_headers = parts[1:]  # Store headers for later use
             self.log_text(f"Headers: {', '.join(self.data_headers)}", "center")
+
             if self.is_logging_to_file and self.log_file_object:
                 try:
                     self.log_file_object.write(",".join(parts[1:]) + "\n")
